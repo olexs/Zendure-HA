@@ -114,6 +114,16 @@ class FakeDevice:
 
     fuseGroup: FakeSelect = field(default_factory=FakeSelect)
     fuseGrp: Any = None
+    # 2A introduces a per-device `p1Source` ZendureRestoreSelect (see
+    # docs/agents/plans/2026-05-14-multiple-p1-sensors.md). Today this field
+    # is unused by the integration; the default mirrors the single legacy P1
+    # so the post-2A FuseGroup partition key
+    # `(fuseGroup.state, p1Source.current_option)` keeps single-P1 behavior
+    # byte-identical. 2A multi-P1 tests can override `current_option` to
+    # exercise the new partition.
+    p1Source: FakeSelect = field(
+        default_factory=lambda: FakeSelect(current_option="sensor.power_actual")
+    )
 
     state: Any = None  # DeviceState; set lazily because of import-cycle concerns
 
@@ -159,6 +169,45 @@ class FakeDevice:
 
     def setStatus(self) -> None:
         self.setStatus_calls += 1
+
+
+def cycle_reset(mgr: Any) -> None:
+    """Clear the manager's per-cycle scratch — same shape as `_p1_changed` does
+    before invoking `powerChanged` (manager.py:393-410).
+
+    After 2A this resets the equivalent fields on a `P1Group` instance instead.
+    Update this helper (or add a sibling) at that point.
+    """
+    mgr.charge = []
+    mgr.charge_limit = 0
+    mgr.charge_optimal = 0
+    mgr.charge_weight = 0
+    mgr.discharge = []
+    mgr.discharge_bypass = 0
+    mgr.discharge_limit = 0
+    mgr.discharge_optimal = 0
+    mgr.discharge_produced = 0
+    mgr.discharge_weight = 0
+    mgr.idle = []
+    mgr.idle_lvlmax = 0
+    mgr.idle_lvlmin = 100
+    mgr.produced = 0
+    for fg in mgr.fuseGroups:
+        fg.initPower = True
+
+
+async def drive(
+    mgr: Any, p1: int, *, is_fast: bool = False, time: datetime | None = None
+) -> None:
+    """Reset per-cycle scratch and dispatch a powerChanged cycle.
+
+    Multi-cycle tests can omit `cycle_reset` calls and use `drive` directly —
+    it runs the full `_p1_changed`-equivalent setup each invocation. Tests
+    that want fine control over scratch state should call `cycle_reset`
+    separately.
+    """
+    cycle_reset(mgr)
+    await mgr.powerChanged(p1=p1, isFast=is_fast, time=time or datetime.now())
 
 
 def build_test_manager(

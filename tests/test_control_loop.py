@@ -22,7 +22,13 @@ import pytest
 
 from custom_components.zendure_ha.const import DeviceState, ManagerMode, ManagerState
 from custom_components.zendure_ha.fusegroup import FuseGroup
-from tests.fakes import FakeDevice, FakeSensorValue, build_test_manager
+from tests.fakes import (
+    FakeDevice,
+    FakeSensorValue,
+    build_test_manager,
+    cycle_reset,
+    drive,
+)
 
 # ---------- helpers ----------
 
@@ -75,32 +81,11 @@ def _attach_fusegroup(
     return FuseGroup("group", maxpower=maxpower, minpower=minpower, devices=devices)
 
 
-def _reset_cycle(mgr) -> None:
-    """Clear per-cycle scratch the way _p1_changed would before calling powerChanged."""
-    mgr.charge = []
-    mgr.charge_limit = 0
-    mgr.charge_optimal = 0
-    mgr.charge_weight = 0
-    mgr.discharge = []
-    mgr.discharge_bypass = 0
-    mgr.discharge_limit = 0
-    mgr.discharge_optimal = 0
-    mgr.discharge_produced = 0
-    mgr.discharge_weight = 0
-    mgr.idle = []
-    mgr.idle_lvlmax = 0
-    mgr.idle_lvlmin = 100
-    mgr.produced = 0
-    for fg in mgr.fuseGroups:
-        fg.initPower = True
-
-
-async def _drive(
-    mgr, p1: int, *, is_fast: bool = False, time: datetime | None = None
-) -> None:
-    """Reset per-cycle scratch + call powerChanged. Mirrors _p1_changed's setup."""
-    _reset_cycle(mgr)
-    await mgr.powerChanged(p1=p1, isFast=is_fast, time=time or datetime.now())
+# `cycle_reset` and `drive` are imported from tests.fakes — see fakes.py.
+# Aliased to the underscore-prefixed names for compatibility with the test
+# bodies that originally defined them locally.
+_reset_cycle = cycle_reset
+_drive = drive
 
 
 # ============================================================================

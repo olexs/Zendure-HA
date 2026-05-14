@@ -23,7 +23,7 @@ import pytest
 
 from custom_components.zendure_ha.const import ManagerMode
 from custom_components.zendure_ha.fusegroup import FuseGroup
-from tests.fakes import FakeDevice, FakeSensorValue, build_test_manager
+from tests.fakes import FakeDevice, FakeSensorValue, build_test_manager, drive
 
 
 def _charge_device(name: str, *, electric_level: int = 50) -> FakeDevice:
@@ -52,25 +52,9 @@ def _fg(devices: list[FakeDevice]) -> FuseGroup:
     return FuseGroup("g", maxpower=2400, minpower=-2400, devices=devices)
 
 
-async def _drive(mgr: object, *, p1: int, time: datetime) -> None:
-    """Reset per-cycle scratch (NOT hysteresis state) and call powerChanged."""
-    mgr.charge = []
-    mgr.charge_limit = 0
-    mgr.charge_optimal = 0
-    mgr.charge_weight = 0
-    mgr.discharge = []
-    mgr.discharge_bypass = 0
-    mgr.discharge_limit = 0
-    mgr.discharge_optimal = 0
-    mgr.discharge_produced = 0
-    mgr.discharge_weight = 0
-    mgr.idle = []
-    mgr.idle_lvlmax = 0
-    mgr.idle_lvlmin = 100
-    mgr.produced = 0
-    for fg in mgr.fuseGroups:
-        fg.initPower = True
-    await mgr.powerChanged(p1=p1, isFast=False, time=time)
+# Imported from tests.fakes. Aliased so this file's call sites keep their
+# explicit `_drive(mgr, p1=..., time=...)` shape that documents intent.
+_drive = drive
 
 
 async def test_cold_start_charge_clamps_first_cycle_releases_second() -> None:

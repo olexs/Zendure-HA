@@ -18,13 +18,11 @@ where `home` is the partition outcome:
 
 from __future__ import annotations
 
-from datetime import datetime
-
 import pytest
 
 from custom_components.zendure_ha.const import ManagerMode
 from custom_components.zendure_ha.fusegroup import FuseGroup
-from tests.fakes import FakeDevice, FakeSensorValue, build_test_manager
+from tests.fakes import FakeDevice, FakeSensorValue, build_test_manager, drive
 
 
 def _device(
@@ -55,25 +53,7 @@ def _attach_fg(devices: list[FakeDevice]) -> FuseGroup:
     return FuseGroup("group", maxpower=2400, minpower=-2400, devices=devices)
 
 
-async def _drive(mgr: object, p1: int) -> None:
-    # Reset per-cycle scratch (matches _p1_changed setup).
-    mgr.charge = []
-    mgr.charge_limit = 0
-    mgr.charge_optimal = 0
-    mgr.charge_weight = 0
-    mgr.discharge = []
-    mgr.discharge_bypass = 0
-    mgr.discharge_limit = 0
-    mgr.discharge_optimal = 0
-    mgr.discharge_produced = 0
-    mgr.discharge_weight = 0
-    mgr.idle = []
-    mgr.idle_lvlmax = 0
-    mgr.idle_lvlmin = 100
-    mgr.produced = 0
-    for fg in mgr.fuseGroups:
-        fg.initPower = True
-    await mgr.powerChanged(p1=p1, isFast=False, time=datetime.now())
+_drive = drive  # imported from tests.fakes
 
 
 async def test_power_sums_three_device_contributions() -> None:
