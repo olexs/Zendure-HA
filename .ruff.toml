@@ -41,6 +41,17 @@ ignore = [
     "PGH003", #blanket-type-ignore
 ]
 
+[lint.per-file-ignores]
+"tests/*" = [
+    "S101",   # asserts allowed in tests
+    "D",      # docstrings optional in tests
+    "ANN",    # annotations optional on test helpers
+    "PLR2004", # magic numbers OK in test scenarios
+    "PT011",  # broad pytest.raises is fine in tests
+    "SLF001", # private member access — needed for object.__new__(ZendureManager) setup
+    "INP001", # tests/ namespace package is intentional
+]
+
 [lint.flake8-pytest-style]
 fixture-parentheses = false
 

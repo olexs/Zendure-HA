@@ -1,0 +1,17 @@
+pytest>=8.0
+pytest-asyncio>=0.24
+pytest-cov>=5.0
+# pytest-homeassistant-custom-component must match the HA version pinned in
+# requirements.txt. Patch versions track HA releases; minor versions track
+# the plugin's extraction methodology. Bump when bumping HA.
+pytest-homeassistant-custom-component>=0.13.324
+
+# HA component transitive deps that aren't pulled in by the homeassistant
+# wheel directly. zendure_ha imports homeassistant.components.bluetooth at
+# module load, which transitively requires usb (aiousbwatcher, serialx) and
+# bluetooth (dbus-fast). serialx in turn unconditionally imports
+# aioesphomeapi inside its esphome platform shim, so we need that too.
+aiousbwatcher
+serialx
+dbus-fast
+aioesphomeapi

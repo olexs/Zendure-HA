@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Run the zendure_ha test suite using the local .venv.
+set -e
+
+cd "$(dirname "$0")/.."
+
+if [[ ! -d .venv ]]; then
+    echo "Creating .venv..." >&2
+    python3.14 -m venv .venv
+    .venv/bin/python -m pip install --quiet --upgrade pip
+fi
+
+.venv/bin/python -m pip install --quiet --requirement requirements.txt --requirement requirements-test.txt
+.venv/bin/python -m pytest tests/ "$@"

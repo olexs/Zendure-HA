@@ -138,16 +138,16 @@ Lay down the directory layout, dependencies, fakes, and CI workflow. By the end 
 
 **Tasks**:
 
-- [ ] Create `tests/__init__.py` (empty, to make tests a package).
-- [ ] Create `tests/conftest.py` with:
-  - [ ] `pytest_plugins = ["pytest_homeassistant_custom_component"]`
-  - [ ] `pytestmark = pytest.mark.asyncio` is **not** set globally — instead set `asyncio_mode = "auto"` in `pyproject.toml` or `pytest.ini`
-  - [ ] `enable_custom_integrations` autouse fixture (re-exported / aliased from the plugin)
-  - [ ] `mock_zendure_token` fixture: returns `base64.b64encode(b"https://api.test.example.appkey-xyz").decode()` — `Api.ApiHA` does `rsplit(".", 1)` on the decoded value, so the last `.` must separate url from appkey.
-  - [ ] `synthetic_device_definition(model, deviceId, sn)` helper
-  - [ ] `mock_api_connect` fixture: monkeypatches `custom_components.zendure_ha.api.Api.Connect` to return `{"deviceList": [...], "mqtt": {"clientId": "test", "url": "mqtt.test:1883", "username": "u", "password": "p"}}`
-  - [ ] `mock_paho_client` fixture: monkeypatches `paho.mqtt.client.Client` to a `MagicMock`
-- [ ] Create `tests/fakes.py`:
+- [x] Create `tests/__init__.py` (empty, to make tests a package).
+- [x] Create `tests/conftest.py` with:
+  - [x] `pytest_plugins = ["pytest_homeassistant_custom_component"]`
+  - [x] `pytestmark = pytest.mark.asyncio` is **not** set globally — instead set `asyncio_mode = "auto"` in `pyproject.toml` or `pytest.ini`
+  - [x] `enable_custom_integrations` autouse fixture (re-exported / aliased from the plugin)
+  - [x] `mock_zendure_token` fixture: returns `base64.b64encode(b"https://api.test.example.appkey-xyz").decode()` — `Api.ApiHA` does `rsplit(".", 1)` on the decoded value, so the last `.` must separate url from appkey.
+  - [x] `synthetic_device_definition(model, deviceId, sn)` helper
+  - [x] `mock_api_connect` fixture: monkeypatches `custom_components.zendure_ha.api.Api.Connect` to return `{"deviceList": [...], "mqtt": {"clientId": "test", "url": "mqtt.test:1883", "username": "u", "password": "p"}}`
+  - [x] `mock_paho_client` fixture: monkeypatches `paho.mqtt.client.Client` to a `MagicMock`
+- [x] Create `tests/fakes.py`:
    ```python
    from dataclasses import dataclass, field
    from custom_components.zendure_ha.const import DeviceState
@@ -260,28 +260,22 @@ Lay down the directory layout, dependencies, fakes, and CI workflow. By the end 
        m.operationstate = FakeSensorValue()
        return m
    ```
-- [ ] Create `requirements-test.txt`:
+- [x] Create `requirements-test.txt`:
    ```
    pytest>=8.0
    pytest-asyncio>=0.24
    pytest-cov>=5.0
    pytest-homeassistant-custom-component  # pin to specific version (see below)
    ```
-- [ ] Resolve the `pytest-homeassistant-custom-component` pin: from the master changelog, pick the latest release whose `ha_version` is ≤ 2026.4.3 + 1 patch (to avoid SDK drift). Verify by running `pip install homeassistant>=2026.4.3 pytest-homeassistant-custom-component==<candidate>` in a clean venv and confirming the resolver picks an HA version that doesn't conflict. Pin to that exact version in `requirements-test.txt`.
-- [ ] Create `pyproject.toml` (or add to existing — none exists in the repo currently) with a minimal pytest config:
-   ```toml
-   [tool.pytest.ini_options]
-   asyncio_mode = "auto"
-   testpaths = ["tests"]
-   ```
-   Note: putting this in `pyproject.toml` (a new file) is cleaner than `pytest.ini`. Verify no existing tool picks up `pyproject.toml` and changes behavior — the repo only has `.ruff.toml`, so this is greenfield.
-- [ ] Append to `.ruff.toml`:
+- [x] Resolve the `pytest-homeassistant-custom-component` pin: from the master changelog, pick the latest release whose `ha_version` is ≤ 2026.4.3 + 1 patch (to avoid SDK drift). Verify by running `pip install homeassistant>=2026.4.3 pytest-homeassistant-custom-component==<candidate>` in a clean venv and confirming the resolver picks an HA version that doesn't conflict. Pin to that exact version in `requirements-test.txt`. **Resolved: `>=0.13.324`** lands `pytest-homeassistant-custom-component==0.13.330` + `homeassistant==2026.5.1` on Python 3.14.4 (HA 2026.4+ requires Python ≥3.14.2).
+- [x] Create `pyproject.toml` (or add to existing — none exists in the repo currently) with a minimal pytest config. **Added `pythonpath = ["."]` to expose the repo root for `from custom_components.zendure_ha ...` imports.**
+- [x] Append to `.ruff.toml`:
    ```toml
    [lint.per-file-ignores]
-   "tests/*" = ["S101", "D", "ANN", "PLR2004", "PT011", "SLF001"]
+   "tests/*" = ["S101", "D", "ANN", "PLR2004", "PT011", "SLF001", "INP001"]
    ```
-   - `S101` (asserts allowed in tests), `D` (docstrings optional), `ANN` (annotations optional on test helpers), `PLR2004` (magic numbers OK), `PT011` (broad `pytest.raises`), `SLF001` (private member access — needed for `object.__new__(ZendureManager)` setup).
-- [ ] Create `scripts/test`:
+   - `S101` (asserts allowed in tests), `D` (docstrings optional), `ANN` (annotations optional on test helpers), `PLR2004` (magic numbers OK), `PT011` (broad `pytest.raises`), `SLF001` (private member access — needed for `object.__new__(ZendureManager)` setup), `INP001` (tests/ namespace package is intentional).
+- [x] Create `scripts/test`:
    ```bash
    #!/usr/bin/env bash
    set -e
@@ -290,7 +284,7 @@ Lay down the directory layout, dependencies, fakes, and CI workflow. By the end 
    python3 -m pytest tests/ "$@"
    ```
    `chmod +x scripts/test`.
-- [ ] Create `.github/workflows/tests.yaml`:
+- [x] Create `.github/workflows/tests.yaml` (Python 3.14 in CI to match HA 2026.4+ runtime requirement):
    ```yaml
    name: Tests
    on:
@@ -312,7 +306,7 @@ Lay down the directory layout, dependencies, fakes, and CI workflow. By the end 
          - name: Run pytest
            run: pytest tests/ -q
    ```
-- [ ] Create a placeholder `tests/test_smoke.py` with one trivial test that imports `custom_components.zendure_ha.manager` and asserts the module loaded — to prove the CI is wired up before any real tests exist:
+- [x] Create a placeholder `tests/test_smoke.py` with one trivial test that imports `custom_components.zendure_ha.manager` and asserts the module loaded — to prove the CI is wired up before any real tests exist:
    ```python
    def test_imports():
        from custom_components.zendure_ha import manager
@@ -320,13 +314,19 @@ Lay down the directory layout, dependencies, fakes, and CI workflow. By the end 
    ```
 
 **Automated Verification**:
-- [ ] `scripts/lint` passes (ruff doesn't trip on `tests/`).
-- [ ] `scripts/test` runs locally, discovers and passes `tests/test_smoke.py`.
-- [ ] `pytest tests/ -q` exits 0 with one passing test.
-- [ ] GitHub Actions `Tests` workflow runs green on the first push.
+- [x] `scripts/lint` passes (ruff doesn't trip on `tests/`).
+- [x] `scripts/test` runs locally, discovers and passes `tests/test_smoke.py`.
+- [x] `pytest tests/ -q` exits 0 with one passing test.
+- [ ] GitHub Actions `Tests` workflow runs green on the first push. *(awaits push to remote — not yet pushed)*
 
 **Manual Verification**:
 - (Omitted — internal infrastructure phase. Validation is in the automated checks above.)
+
+**Implementation notes**:
+- Used Python **3.14.4** (not 3.12 as the original plan implied). HA 2026.4+ requires Python ≥ 3.14.2; the venv would not install otherwise. CI workflow pinned to `python-version: "3.14"`.
+- Resolved `pytest-homeassistant-custom-component>=0.13.324` lands `0.13.330` + `homeassistant==2026.5.1`. The plugin's resolver picked a newer HA than the `>=2026.4.3` minimum but it's compatible.
+- HA's `homeassistant.components.bluetooth` (imported by `device.py:22`) requires several transitive deps not pulled in by the homeassistant wheel: `aiousbwatcher`, `serialx`, `dbus-fast`, `aioesphomeapi`. Added to `requirements-test.txt`.
+- `pythonpath = ["."]` in `pyproject.toml` was insufficient on its own; the plugin's `hass` fixture mutates `custom_components.__path__` at runtime. Solution: dropped the `auto_enable_custom_integrations` autouse — pure-pytest tests (Phase 2/3/4) use plain Python imports without `hass`; Phase 5 tests opt in to `enable_custom_integrations` explicitly and will need a symlink/copy of `custom_components/zendure_ha` into the plugin's `testing_config` dir at that phase.
 
 ---
 
@@ -338,22 +338,23 @@ Pin the weighted distribution math in `FuseGroup.charge_limit` and `FuseGroup.di
 
 **Tasks**:
 
-- [ ] Create `tests/test_fusegroup.py` with these scenarios — for each, instantiate `FuseGroup(name, maxpower, minpower, devices=[FakeDevice(...)])`, manipulate `initPower` and per-device sensor values, call `charge_limit(d)` / `discharge_limit(d)`, and assert resulting `d.pwr_max`:
+- [x] Create `tests/test_fusegroup.py` with these scenarios — for each, instantiate `FuseGroup(name, maxpower, minpower, devices=[FakeDevice(...)])`, manipulate `initPower` and per-device sensor values, call `charge_limit(d)` / `discharge_limit(d)`, and assert resulting `d.pwr_max`:
 
-  - [ ] `test_single_device_charge_caps_at_minpower` — group `maxpower=800, minpower=-1200`, device `charge_limit=-1500`. Expect `d.pwr_max == max(-1200, -1500) == -1200`.
-  - [ ] `test_single_device_discharge_caps_at_maxpower` — symmetric, expect `d.pwr_max == min(800, 1500) == 800`.
-  - [ ] `test_single_device_within_limits` — group `maxpower=800, minpower=-1200`, device `charge_limit=-1000, discharge_limit=600`. Expect `pwr_max` unchanged at `-1000` / `600`.
-  - [ ] `test_multi_device_charge_weighted_by_remaining_capacity` — two devices, both with `homeInput.asInt=100` (so they pass the `> 0` guard), `charge_limit=-800`, `electricLevel=50` for device A, `electricLevel=80` for device B. Expect device A (lower SOC, more capacity remaining) gets a larger share of the negative limit.
-  - [ ] `test_multi_device_discharge_weighted_by_soc` — symmetric, two devices with `homeOutput.asInt=100`, `discharge_limit=800`, `electricLevel=80` for A, `electricLevel=50` for B. Expect A (higher SOC) gets larger share.
-  - [ ] `test_multi_device_skips_zero_homeinput_in_charge` — three devices, two with `homeInput.asInt>0`, one with `homeInput.asInt=0`. Expect the zero-homeInput device's `pwr_max` is not touched by `charge_limit` math.
-  - [ ] `test_multi_device_all_zero_homeinput_charge` — all devices have `homeInput.asInt=0`. Expect `pwr_max` unchanged on all (no math runs because `weight == 0`).
-  - [ ] `test_initPower_consumed_only_once` — call `charge_limit(d)` twice without resetting `initPower`. Expect the second call returns the cached `d.pwr_max` from the first call (no recomputation, no mutation).
-  - [ ] `test_initPower_reset_recomputes` — call `charge_limit(d)`, change device SOC, set `fg.initPower=True`, call again. Expect new value based on updated SOC.
-  - [ ] `test_charge_weight_zero_uses_charge_start_fallback` — synthesize the degenerate case for the `pwr_max = ... if weight < 0 else fd.charge_start` ternary at fusegroup.py:41. Since `charge_limit` is always negative and `(100 - electricLevel)` is non-negative, `weight = sum((100 - SOC) * charge_limit)` is normally `≤ 0`; the `else fd.charge_start` branch fires only when `weight == 0` (all devices at SOC=100 or all `charge_limit==0`). Construct that degenerate input and assert each device's `pwr_max == fd.charge_start`.
+  - [x] `test_single_device_charge_caps_at_minpower` — group `maxpower=800, minpower=-1200`, device `charge_limit=-1500`. Expect `d.pwr_max == max(-1200, -1500) == -1200`.
+  - [x] `test_single_device_discharge_caps_at_maxpower` — symmetric, expect `d.pwr_max == min(800, 1500) == 800`.
+  - [x] `test_single_device_within_limits` — group `maxpower=800, minpower=-1200`, device `charge_limit=-1000, discharge_limit=600`. Expect `pwr_max` unchanged at `-1000` / `600`.
+  - [x] `test_multi_device_charge_weighted_by_remaining_capacity` — two devices, both with `homeInput.asInt=100` (so they pass the `> 0` guard), `charge_limit=-800`, `electricLevel=50` for device A, `electricLevel=80` for device B. Expect device A (lower SOC, more capacity remaining) gets a larger share of the negative limit.
+  - [x] `test_multi_device_discharge_weighted_by_soc` — symmetric, two devices with `homeOutput.asInt=100`, `discharge_limit=800`, `electricLevel=80` for A, `electricLevel=50` for B. Expect A (higher SOC) gets larger share.
+  - [x] `test_multi_device_skips_zero_homeinput_in_charge` — three devices, two with `homeInput.asInt>0`, one with `homeInput.asInt=0`. Expect the zero-homeInput device's `pwr_max` is not touched by `charge_limit` math.
+  - [x] `test_multi_device_all_zero_homeinput_charge` — all devices have `homeInput.asInt=0`. Expect `pwr_max` unchanged on all (no math runs because `weight == 0`).
+  - [x] `test_initPower_consumed_only_once` — call `charge_limit(d)` twice without resetting `initPower`. Expect the second call returns the cached `d.pwr_max` from the first call (no recomputation, no mutation).
+  - [x] `test_initPower_reset_recomputes` — call `charge_limit(d)`, change device SOC, set `fg.initPower=True`, call again. Expect new value based on updated SOC.
+  - [x] `test_charge_weight_zero_uses_charge_start_fallback` — synthesize the degenerate case for the `pwr_max = ... if weight < 0 else fd.charge_start` ternary at fusegroup.py:41. Since `charge_limit` is always negative and `(100 - electricLevel)` is non-negative, `weight = sum((100 - SOC) * charge_limit)` is normally `≤ 0`; the `else fd.charge_start` branch fires only when `weight == 0` (all devices at SOC=100 or all `charge_limit==0`). Construct that degenerate input and assert each device's `pwr_max == fd.charge_start`.
+  - [x] **Bonus**: parametrized `test_single_device_charge_uses_max_of_minpower_and_limit` covering 3 boundary cases (tighter / looser / equal) — pins the single-device `max()` clamp at boundary values.
 
 **Automated Verification**:
-- [ ] `pytest tests/test_fusegroup.py -q` passes (10 tests).
-- [ ] `scripts/lint` clean.
+- [x] `pytest tests/test_fusegroup.py -q` passes (13 tests — 10 named + 3 parametrized).
+- [x] `scripts/lint` clean.
 
 **Manual Verification**:
 - (Omitted — pure-function math, fully covered by automated tests.)
