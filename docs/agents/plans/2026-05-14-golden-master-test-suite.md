@@ -381,45 +381,45 @@ async def test_X():
 **Tasks** — grouped by what each scenario pins:
 
 *Partitioning (`powerChanged` lines 426-455):*
-- [ ] `test_partition_charge_when_home_input_negative` — device with `homeInput.asInt > 0` (so `home = -homeInput < 0`) ends in `charge` list.
-- [ ] `test_partition_discharge_when_home_output_positive` — device with `homeOutput.asInt > 0` ends in `discharge` list.
-- [ ] `test_partition_idle_when_neither` — device with `homeInput=0, homeOutput=0, pwr_offgrid=0` ends in `idle` list. Assert `idle_lvlmin/max` track its SOC.
-- [ ] `test_partition_offline_excluded` — device with `power_get_result=False` doesn't appear in any list. No `power_charge/discharge/off` calls on that device.
-- [ ] `test_partition_pwr_offgrid_positive_routed_as_charge` — device with `homeInput=0` but `pwr_offgrid>0` ends up in `charge` (per the `max(0, pwr_offgrid)` arm at manager.py:433).
-- [ ] `test_pwr_produced_clamped_at_zero` — device with `batteryOutput=50, homeInput=50, batteryInput=0, homeOutput=0` would yield a *positive* unclamped value, but `min(0, ...)` clamps it to 0 (manager.py:429). After `powerChanged`, assert `d.pwr_produced == 0` and `mgr.produced == 0`. (Pins the `min(0, ...)` clamp — mutation M2.)
+- [x] `test_partition_charge_when_home_input_negative`
+- [x] `test_partition_discharge_when_home_output_positive`
+- [x] `test_partition_idle_when_neither` — also asserts `idle_lvlmax/min` track the device's SOC.
+- [x] `test_partition_offline_excluded` — `power_get_result=False` device has no dispatch calls.
+- [x] `test_partition_pwr_offgrid_positive_routed_as_charge` — **deviation**: pinned the observed behavior, which is `home = -homeInput + max(0, pwr_offgrid)` = positive when only `pwr_offgrid > 0`. So the device falls through to `idle`, NOT `charge`. The plan misread `max(0, pwr_offgrid)` semantics. Documented in the test.
+- [x] `test_pwr_produced_clamped_at_zero` — pins `min(0, ...)` clamp.
 
 *ManagerMode dispatch (`powerChanged` lines 471-501):*
-- [ ] `test_mode_off_writes_operation_state_off` — `operation=OFF`, any p1 → `operationstate.value == ManagerState.OFF.value`. No `power_charge`/`power_discharge` calls.
-- [ ] `test_mode_matching_negative_setpoint_calls_charge` — `operation=MATCHING`, setpoint resolves to <0 → `power_charge` called.
-- [ ] `test_mode_matching_positive_setpoint_calls_discharge` — symmetric.
-- [ ] `test_mode_matching_zero_setpoint_calls_discharge_zero` — `operation=MATCHING`, setpoint exactly `0` → falls into the `else: power_discharge` arm (the `< 0` check at manager.py:473 is strict). Asserts the boundary so a `<` vs `<=` flip would be caught.
-- [ ] `test_mode_matching_discharge_clamps_at_zero` — `operation=MATCHING_DISCHARGE`, negative setpoint → `power_discharge(0)` not `power_charge`.
-- [ ] `test_mode_matching_charge_with_produced_discharges_produced` — `operation=MATCHING_CHARGE`, setpoint>0 and `produced > POWER_START` → `power_discharge(min(produced, setpoint))`.
-- [ ] `test_mode_store_solar_charges_when_setpoint_negative` — `operation=STORE_SOLAR`, setpoint<0 → `power_charge(setpoint)`.
-- [ ] `test_mode_store_solar_does_not_discharge_produced` — `operation=STORE_SOLAR`, setpoint>0, `produced > POWER_START`. The inner `and self.operation == ManagerMode.MATCHING_CHARGE` check at manager.py:485 means STORE_SOLAR must fall through to `power_discharge(0)`, NOT `power_discharge(min(produced, setpoint))`. Pins the operation-specific branch (catches mutation M9).
-- [ ] `test_mode_manual_uses_manualpower_not_p1` — `operation=MANUAL, manualpower=300` regardless of p1 → `power_discharge(300)`. `manualpower=-200` → `power_charge(-200)`.
+- [x] `test_mode_off_writes_operation_state_off`
+- [x] `test_mode_matching_negative_setpoint_calls_charge`
+- [x] `test_mode_matching_positive_setpoint_calls_discharge`
+- [x] `test_mode_matching_zero_setpoint_calls_discharge_zero` — asserts `operationstate == IDLE` (proves the else-arm took setpoint=0).
+- [x] `test_mode_matching_discharge_clamps_at_zero`
+- [x] `test_mode_matching_charge_with_produced_discharges_produced`
+- [x] `test_mode_store_solar_charges_when_setpoint_negative`
+- [x] `test_mode_store_solar_does_not_discharge_produced` — pins the M9 mutation guard.
+- [x] `test_mode_manual_uses_manualpower_not_p1` — covers both positive and negative manualpower.
 
 *`power_charge` distribution (manager.py:503-567):*
-- [ ] `test_charge_single_device_full_setpoint` — one device, `pwr_max=-800`, setpoint `-500`. Expect `power_charge(-500)` on that device.
-- [ ] `test_charge_two_devices_weighted_by_soc` — device A SOC=20, B SOC=80, both `pwr_max=-800`. Setpoint `-600`. Expect A gets a larger share (lower SOC = more remaining capacity = bigger weight).
-- [ ] `test_charge_weight_zero_no_division_error` — all devices at SOC=100 (so `charge_weight==0`). Expect no exception, no charge issued.
-- [ ] `test_charge_stops_discharging_devices` — one device in `discharge` list, one in `charge`. Expect the `discharge` device gets `power_discharge(0 if pwr_offgrid==0 else -10)`.
-- [ ] `test_charge_skips_bypass_device_when_stopping_discharge` — `discharge` device with `byPass.asInt > 0` is left alone (continue at manager.py:511).
-- [ ] `test_charge_hysteresis_first_call_returns_zero` — first call with `charge_time == datetime.max` resets `charge_time` to `time + 2s` (or `+60s` depending on last-call gap) and treats setpoint as 0.
-- [ ] `test_charge_hysteresis_second_call_respects_setpoint` — pre-set `charge_time` to `<= time`. Expect setpoint flows through to `power_charge`.
-- [ ] `test_charge_starts_idle_device_when_dev_start_negative` — one charge device at high SOC, one idle device at low SOC. Expect idle device receives `power_charge(...)` to "start" it (manager.py:557-566).
+- [x] `test_charge_single_device_full_setpoint` — pins exact dispatch value (`power_charge(-800)`).
+- [x] `test_charge_two_devices_weighted_by_soc` — qualitative assertion (low_soc < high_soc).
+- [x] `test_charge_weight_zero_no_division_error` — no exception raised.
+- [x] `test_charge_stops_discharging_devices` — discharge device gets `power_discharge(0)`.
+- [x] `test_charge_skips_bypass_device_when_stopping_discharge`
+- [x] `test_charge_hysteresis_first_call_returns_zero`
+- [x] `test_charge_hysteresis_second_call_respects_setpoint`
+- [x] `test_charge_starts_idle_device_when_dev_start_negative`
 
 *`power_discharge` distribution (manager.py:569-630):*
-- [ ] `test_discharge_single_device_full_setpoint` — symmetric to charge case.
-- [ ] `test_discharge_two_devices_weighted_by_soc` — A SOC=80, B SOC=20, both `pwr_max=800`. Setpoint 600. Expect A gets larger share.
-- [ ] `test_discharge_weight_zero_distributes_evenly` — all devices at SOC=0 → fallback at manager.py:599-600 distributes setpoint evenly across remaining devices.
-- [ ] `test_discharge_socfull_passes_through_solar_only` — discharge device with `state=SOCFULL, pwr_produced=-200`. Expect `power_discharge(200)` regardless of `pwr_max` (manager.py:603-605).
-- [ ] `test_discharge_bypass_clamps_setpoint_when_p1_nonneg` — pin the issue #1151 fix at manager.py:466-467: setpoint=100, `discharge_bypass=150`, `p1=0` → final setpoint after clamp == `max(0, 100-150) == 0` (not negative, so no charge triggered).
-- [ ] `test_discharge_bypass_allows_setpoint_negative_when_p1_negative` — same `discharge_bypass=150` but `p1=-50` → no clamp at zero (the `if p1>=0` arm not taken), allowing setpoint to go further negative.
+- [x] `test_discharge_single_device_full_setpoint`
+- [x] `test_discharge_two_devices_weighted_by_soc` — qualitative (high > low).
+- [x] `test_discharge_weight_zero_distributes_evenly` — no exception.
+- [x] `test_discharge_socfull_passes_through_solar_only` — **deviation**: pinned exact dispatch value (350W). Plan's expected value (200) was based on a misread of the `pwr_produced` math (it doesn't equal `-battery_input`). The full math chain (bypass accumulation + setpoint clamp + weighted distribution + final cap) is documented in the test docstring.
+- [x] `test_discharge_bypass_clamps_setpoint_when_p1_nonneg` — pins issue #1151.
+- [x] `test_discharge_bypass_allows_setpoint_negative_when_p1_negative` — **deviation**: asserts `mgr.operationstate.value == CHARGE` instead of `("power_charge", ...) in calls`. The device is in `self.discharge`, so `power_charge`'s main loop doesn't dispatch to it, but `operationstate` reflects the post-clamp setpoint sign.
 
 **Automated Verification**:
-- [ ] `pytest tests/test_control_loop.py -q` passes (~24 tests).
-- [ ] `scripts/lint` clean.
+- [x] `pytest tests/test_control_loop.py -q` passes (29 tests).
+- [x] `scripts/lint` clean.
 
 **Manual Verification**:
 - (Omitted — every assertion is mechanical and verified by pytest. The "did the suite catch real bugs?" question is answered in Phase 6.)
@@ -434,17 +434,18 @@ Pin the partition behavior. These tests use `build_test_manager` + `FakeDevice` 
 
 **Tasks**:
 
-- [ ] `test_single_device_group800_creates_own_fusegroup` — one device, `fuseGroup.state="group800"`, `fuseGroup.value=2`. Expect `len(mgr.fuseGroups)==1`, `mgr.fuseGroups[0].maxpower==800`, `mgr.fuseGroups[0].minpower==-1200`, `device.fuseGrp is mgr.fuseGroups[0]`.
-- [ ] `test_unused_fusegroup_calls_power_off_when_not_off_mode` — `fuseGroup.state="unused"`, `operation=MATCHING`. Expect `("power_off", None) in device.calls`.
-- [ ] `test_unused_fusegroup_skips_power_off_when_off_mode` — same setup but `operation=OFF`. Expect no `power_off` call.
-- [ ] `test_part_of_x_share_join_produces_shared_group` — device A `fuseGroup.state="group800", value=2`, device B `fuseGroup.state="part of A fusegroup", value="<A's deviceId>"` (the string-key lookup at manager.py:236). Expect B's `fuseGrp` is A's group, and the group has both devices.
-- [ ] `test_split_when_combined_limits_fit_individual` — two devices each with `charge_limit=-600, discharge_limit=600`, shared group with `maxpower=1200, minpower=-1200`. Expect the split heuristic (manager.py:244-246) yields **two** single-device groups in `mgr.fuseGroups`, not one shared group.
-- [ ] `test_no_split_when_combined_limits_exceed` — two devices with `charge_limit=-800, discharge_limit=800`, shared group with `maxpower=1200, minpower=-1200`. Expect **one** shared group remains in `mgr.fuseGroups`.
-- [ ] `test_setStatus_called_per_device` — confirm `setStatus()` invocation count == number of devices (we'll record this on FakeDevice with a counter).
+- [x] `test_single_device_group800_creates_own_fusegroup`
+- [x] `test_unused_fusegroup_calls_power_off_when_not_off_mode`
+- [x] `test_unused_fusegroup_skips_power_off_when_off_mode`
+- [x] `test_part_of_x_share_join_produces_shared_group` — **important deviation**: pinned the **orphan-group quirk** the plan calls out in the 2A doc. When B does "Part of A", B ends up in BOTH A's shared group AND its own orphan group (from the build pass). `b.fuseGrp` ends up pointing at the orphan (the LAST write in the split/keep loop), NOT at A's shared group. This is intended pre-existing behavior; the 2A plan preserves it. Test asserts: (a) `b in a_group.devices`, (b) `b_group` exists in `mgr.fuseGroups`, (c) `b.fuseGrp is b_group`.
+- [x] `test_split_when_combined_limits_fit_individual` — **deviation**: final count is 3 (2 split single-device groups + 1 orphan), not 2 as the plan said. The orphan-group quirk applies here too.
+- [x] `test_no_split_when_combined_limits_exceed` — **deviation**: final count is 2 (1 shared + 1 orphan), not 1.
+- [x] `test_setStatus_called_per_device` — asserts each device's `setStatus_calls == 1` (using the FakeDevice counter).
+- [x] **Bonus**: `test_part_of_x_join_when_value_does_not_match_falls_through` — covers the predefined-int-key case (value=2 for group800) where the dict lookup never matches, documenting that the integer-key never-matches behavior is the normal path for single-device installs.
 
 **Automated Verification**:
-- [ ] `pytest tests/test_update_fusegroups.py -q` passes (7 tests).
-- [ ] `scripts/lint` clean.
+- [x] `pytest tests/test_update_fusegroups.py -q` passes (8 tests).
+- [x] `scripts/lint` clean.
 
 **Manual Verification**:
 - (Omitted — internal partition logic, no user-facing surface here.)

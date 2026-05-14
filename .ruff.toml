@@ -50,6 +50,7 @@ ignore = [
     "PT011",  # broad pytest.raises is fine in tests
     "SLF001", # private member access — needed for object.__new__(ZendureManager) setup
     "INP001", # tests/ namespace package is intentional
+    "PT018",  # compound assertions read fine for test preconditions
 ]
 
 [lint.flake8-pytest-style]
