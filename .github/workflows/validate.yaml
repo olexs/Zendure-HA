@@ -10,6 +10,8 @@ on:
 
 jobs:
   validate-hacs:
+    # Skip on forks — HACS validation requires upstream-only configuration.
+    if: github.repository == 'zendure/zendure-ha'
     runs-on: "ubuntu-latest"
     steps:
       - name: HACS validation
