@@ -460,27 +460,33 @@ Tests that need a real `HomeAssistant` instance. Uses the `hass` fixture from `p
 
 **Tasks** (`tests/test_migration.py`):
 
-- [ ] `test_migrate_entry_at_minor_5_unchanged` — create a `MockConfigEntry(version=1, minor_version=5, data={...})`, add to `hass`, call `async_migrate_entry(hass, entry)`. Assert returns `True`, `entry.minor_version == 5` (unchanged). Pin current behavior.
-- [ ] `test_migrate_entry_at_minor_4_runs_migration_then_bumps` — entry at `minor_version=4`. Mock `Migration.async_migrate` to a recorder. Assert it was called, and `entry.minor_version == 5` afterwards.
-- [ ] `test_migrate_entry_at_minor_7_pins_downgrade_quirk` — entry at `minor_version=7` (current `MINOR_VERSION` from config_flow). Call migrate. Pin whatever HA actually does (`async_update_entry(minor_version=5)` on a 7 entry either downgrades, no-ops, or errors — document the observed behavior in the test docstring). This test is intentionally pinning a pre-existing quirk so 2A's migration changes don't accidentally "fix" it without anyone noticing.
-- [ ] `test_migration_renames_stale_entity` — pre-seed `entity_registry` with an entity whose `unique_id` follows the old (pre-rename) format, then call `Migration.async_migrate`. Assert the entity's `unique_id` is rewritten to the new format. Use one representative entity from each category (sensor, select, number) if possible.
-- [ ] `test_migration_no_op_for_already_clean_registry` — pre-seed only canonical entities, run migration, assert no `async_update_entity` calls (or no observable changes).
+- [x] `test_migrate_entry_at_minor_5_unchanged` — create a `MockConfigEntry(version=1, minor_version=5, data={...})`, add to `hass`, call `async_migrate_entry(hass, entry)`. Assert returns `True`, `entry.minor_version == 5` (unchanged). Pin current behavior.
+- [x] `test_migrate_entry_at_minor_4_runs_migration_then_bumps` — entry at `minor_version=4`. Mock `Migration.async_migrate` to a recorder. Assert it was called, and `entry.minor_version == 5` afterwards.
+- [x] `test_migrate_entry_at_minor_7_pins_downgrade_quirk` — confirmed: `async_update_entry(version=1, minor_version=5)` actually does downgrade a minor_version=7 entry to 5. Pinned.
+- [x] `test_migration_renames_stale_entity` — single sensor (translation_key="batteryInput") + device named "MyDevice" → renamed to canonical "sensor.mydevice_battery_input". Uses `suggested_object_id` to force the stale `entity_id` so the rename is observable.
+- [x] `test_migration_no_op_for_already_clean_registry` — pre-seed canonical entity, spy on `EntityRegistry.async_update_entity`, assert `assert_not_called()`. Plus stubbed `Migration._update_files` so the test doesn't try to walk `.storage` (testing_config has none).
 
 **Tasks** (`tests/test_config_flow.py`):
 
-- [ ] `test_config_flow_happy_path` — use `mock_api_connect` to return a single synthetic Hyper2000. Call `hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})`. Submit the form with `CONF_APPTOKEN`, `CONF_P1METER="sensor.power_actual"`, `CONF_MQTTLOG=False`, `CONF_MQTTLOCAL=False`. Assert: result type is `create_entry`, `data` contains the four fields, `unique_id == "Zendure"`.
-- [ ] `test_config_flow_mqttlocal_branch_two_step` — submit form with `CONF_MQTTLOCAL=True`. Assert: result type is `form` with `step_id == "local"`. Submit the local step with `CONF_MQTTSERVER, CONF_MQTTPORT, CONF_MQTTUSER, CONF_MQTTPSW`. Assert: final result type is `create_entry`.
-- [ ] `test_options_flow_updates_data` — start from a `MockConfigEntry`. Call `hass.config_entries.options.async_init(entry.entry_id)`. Submit with a changed `CONF_P1METER`. Assert: `entry.data[CONF_P1METER]` is updated. (This pins the options flow's "write to data not options" current behavior — note the `async_update_entry(... data=data)` in `config_flow.py:159`.)
-- [ ] `test_config_flow_reconfigure_path` — call reconfigure on an existing entry, assert it flows through and updates the entry without creating a duplicate.
+- [x] `test_config_flow_happy_path` — patched `Api.Connect` to return a synthetic device list. Asserts CREATE_ENTRY, title="Zendure", unique_id="Zendure", data matches user_input.
+- [x] `test_config_flow_mqttlocal_branch_two_step` — CONF_MQTTLOCAL=True → step "local" → submit MQTT creds → CREATE_ENTRY with merged data.
+- [x] `test_options_flow_updates_data` — pinned "writes to entry.data" behavior (HA convention quirk).
+- [x] `test_config_flow_reconfigure_path` — reconfigure flow updates existing entry's data; no duplicate entry. Aborts with reason "reconfigure_successful".
+
+All 4 require `recorder_mock` (manifest declares `recorder` as a dependency, which HA sets up during flow init). Fixture must be requested BEFORE `hass` due to ordering assertion at plugins.py:1622.
 
 **Tasks** (`tests/test_setup.py`):
 
-- [ ] `test_async_setup_entry_loads_devices` — with `mock_api_connect` + `mock_paho_client`, create a `MockConfigEntry(version=1, minor_version=7, data={CONF_APPTOKEN: "...", CONF_P1METER: "sensor.power_actual", CONF_MQTTLOG: False, CONF_MQTTLOCAL: False})`, add to `hass`, call `await hass.config_entries.async_setup(entry.entry_id)`. Assert: state is `LOADED`, `entry.runtime_data` is a `ZendureManager`, `len(entry.runtime_data.devices) == 1` (matching the mocked deviceList). Then unload: assert state is `NOT_LOADED`.
+- [x] `test_async_setup_entry_loads_devices` — full setup + unload smoke test. Replaces `Api.mqttCloud`/`Api.mqttLocal` with `MagicMock()` via `monkeypatch.setattr` (the `patch("...mqtt_client.Client")` approach can't help — class-level clients are constructed at module import). Stubs `Api.Init` to a no-op because it does `Api.mqttCloud.__init__(CallbackAPIVersion.VERSION2, ...)`, which would *re-init* our MagicMock and set `spec=CallbackAPIVersion`, restricting attribute access.
+
+**Phase 5 prerequisite** (added during implementation):
+
+- [x] **conftest.py `pytest_configure` hook** creates a symlink at `<pytest_homeassistant_custom_component>/testing_config/custom_components/zendure_ha → custom_components/zendure_ha`. The plugin's `hass` fixture boots HA against `testing_config/`, and HA's loader discovers custom integrations by walking `<config_dir>/custom_components/`. Idempotent (replaces stale links from prior runs).
 
 **Automated Verification**:
-- [ ] `pytest tests/test_migration.py tests/test_config_flow.py tests/test_setup.py -q` passes (10 tests).
-- [ ] `scripts/lint` clean.
-- [ ] Total suite (`pytest tests/ -q`) passes ~50 tests.
+- [x] `pytest tests/test_migration.py tests/test_config_flow.py tests/test_setup.py -q` passes (10 tests).
+- [x] `scripts/lint` clean (`.venv/bin/ruff check tests/` and `format --check` both pass).
+- [x] Total suite (`pytest tests/ -q`) passes 61 tests in ~5s.
 
 **Manual Verification**:
 - [ ] **Run the full suite locally and observe pass count + timing**:

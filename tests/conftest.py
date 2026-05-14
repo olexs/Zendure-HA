@@ -27,7 +27,36 @@ pytest_plugins = ["pytest_homeassistant_custom_component"]
 # at the plugin's bundled testing_config — breaking plain imports of
 # `custom_components.zendure_ha` in pure-pytest tests (Phase 2/3/4). HA-bus
 # tests (Phase 5) opt in by adding `enable_custom_integrations` to their
-# argument list along with a symlink/copy step (added in Phase 5).
+# argument list.
+
+
+def pytest_configure(config: pytest.Config) -> None:  # noqa: ARG001
+    """Symlink custom_components/zendure_ha into the plugin's testing_config.
+
+    Phase 5 tests use pytest-homeassistant-custom-component's `hass` fixture,
+    which boots HA against the plugin's bundled `testing_config/` dir. HA's
+    loader discovers custom integrations by walking `<config_dir>/custom_components/`,
+    so we need our integration visible there. A symlink keeps the dev loop tight
+    (edits to the real source are immediately picked up).
+    """
+    # Imported locally to avoid a hard dep at module-collection time.
+    import pytest_homeassistant_custom_component
+
+    plugin_dir = Path(pytest_homeassistant_custom_component.__file__).parent
+    target = plugin_dir / "testing_config" / "custom_components" / "zendure_ha"
+    source = _REPO_ROOT / "custom_components" / "zendure_ha"
+
+    # Replace stale link (e.g. from a previous run with a moved checkout).
+    if target.is_symlink() or target.exists():
+        if target.is_symlink() and target.resolve() == source.resolve():
+            return
+        if target.is_symlink() or target.is_file():
+            target.unlink()
+        else:
+            import shutil
+
+            shutil.rmtree(target)
+    target.symlink_to(source, target_is_directory=True)
 
 
 @pytest.fixture
