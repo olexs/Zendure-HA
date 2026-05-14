@@ -51,6 +51,7 @@ ignore = [
     "SLF001", # private member access — needed for object.__new__(ZendureManager) setup
     "INP001", # tests/ namespace package is intentional
     "PT018",  # compound assertions read fine for test preconditions
+    "DTZ001", # naive datetime mirrors the integration's own datetime.now() usage
 ]
 
 [lint.flake8-pytest-style]
