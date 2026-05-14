@@ -264,25 +264,40 @@ async def test_mode_matching_zero_setpoint_calls_discharge_zero() -> None:
 
     The check at manager.py:473 is strict `< 0`, so 0 goes to else (discharge).
     Pins the boundary so a `<` → `<=` flip would be caught.
+
+    To distinguish the two arms, the device must be in self.charge so that:
+      - power_discharge(0) (else arm) calls d.power_discharge(0) to STOP charging
+      - power_charge(0) (if-arm under the mutation) calls d.power_charge(0) to
+        distribute zero charge across charge devices
+    The dispatched method name differs, which the test asserts on.
     """
-    # No homeInput, no homeOutput, no pwr_offgrid → device goes idle.
-    # That keeps setpoint == p1 == 0 after the partition adjustments.
-    d = _online_device("A", electric_level=50)
+    # home_input=100 lands the device in self.charge. p1=100 balances it back
+    # so setpoint = p1 - homeInput = 0 — the boundary case.
+    d = _online_device("A", home_input=100, electric_level=50)
     fg = _attach_fusegroup([d])
     mgr = build_test_manager([d], operation=ManagerMode.MATCHING, fusegroups=[fg])
 
-    await _drive(mgr, p1=0)
+    await _drive(mgr, p1=100)
 
-    # discharge() arm runs (operationstate=IDLE for setpoint=0 with no discharge)
-    # — but since self.discharge is empty, no actual device call. The key invariant:
-    # operationstate was updated by power_discharge, not power_charge or OFF.
-    # power_charge would have run if setpoint < 0.
+    # operationstate ends up IDLE either way, so the discriminator is the
+    # dispatched method on the device. The else (discharge) arm calls
+    # power_discharge to stop the charging device; the if (charge) arm calls
+    # power_charge to distribute zero charge across charge devices.
     assert mgr.operationstate.value == ManagerState.IDLE.value
+    assert all(c[0] != "power_charge" for c in d.calls), (
+        f"setpoint==0 must take the discharge arm, not charge; got {d.calls}"
+    )
 
 
 async def test_mode_matching_discharge_clamps_at_zero() -> None:
-    """MATCHING_DISCHARGE with negative setpoint → power_discharge(0), not charge."""
-    d = _online_device("A", home_input=300)
+    """MATCHING_DISCHARGE with negative setpoint → power_discharge(0), not charge.
+
+    A discharge-side device (homeOutput > 0) with negative p1 would, under a
+    broken `max(0, setpoint)` clamp, receive a NEGATIVE power_discharge value.
+    The clamp must zero it out: this is the whole point of MATCHING_DISCHARGE.
+    """
+    # discharge-side device: homeOutput > 0 → lands in self.discharge.
+    d = _online_device("A", home_output=300, electric_level=80)
     fg = _attach_fusegroup([d])
     mgr = build_test_manager(
         [d], operation=ManagerMode.MATCHING_DISCHARGE, fusegroups=[fg]
@@ -292,6 +307,14 @@ async def test_mode_matching_discharge_clamps_at_zero() -> None:
 
     # No power_charge call (the clamp prevented it).
     assert all(c[0] != "power_charge" for c in d.calls)
+    # All power_discharge values must be >= 0 — the clamp turned the
+    # negative setpoint into 0 before reaching the device.
+    discharge_calls = [c for c in d.calls if c[0] == "power_discharge"]
+    assert discharge_calls
+    assert all(v >= 0 for _, v in discharge_calls), (
+        f"MATCHING_DISCHARGE must not dispatch negative power_discharge; "
+        f"got {discharge_calls}"
+    )
 
 
 async def test_mode_matching_charge_with_produced_discharges_produced() -> None:
@@ -640,6 +663,71 @@ async def test_discharge_socfull_passes_through_solar_only() -> None:
     assert discharge_calls
     assert discharge_calls[-1][1] == 350, (
         f"SOCFULL solar pass-through expected 350W; got {discharge_calls}"
+    )
+
+
+async def test_discharge_active_does_not_bump_pwr_to_solar_produced() -> None:
+    """ACTIVE devices with solar: the `pwr < -pwr_produced` clamp does NOT fire.
+
+    Pins the SOCFULL guard at manager.py:604 from the *other* side. For a
+    non-SOCFULL device, even if the assigned `pwr` from the weighted
+    distribution happens to fall below the solar production amount, the
+    dispatch must NOT be bumped up to `-d.pwr_produced`. That clamp is for
+    SOCFULL only — it routes solar through the inverter instead of charging
+    the battery. Removing the SOCFULL guard would shift the distribution:
+    the first device would get bumped up to setpoint (capped via line 612),
+    leaving zero for the second device.
+
+    Math trace (2 ACTIVE devices, identical loads + solar production):
+        each pwr_produced = min(0, 0+0-200-100) = -300
+        partition: setpoint = p1 + homeOutput*2 = 0 + 200 = 200
+                   discharge_produced = 600; discharge_weight = 800*50 + 800*50 = 80000
+        solaronly = 600 >= 200 → True → limit = 600
+        i=0 (first device): weighted pwr = 200*40000/80000 = 100
+            SOCFULL clamp: state != SOCFULL → False → pwr stays 100
+            first-device hysteresis: delta=120-100=20 → pwr_low=20, pwr unchanged
+            dispatch: 100; setpoint -= 100 → 100
+        i=1 (second device): weighted pwr = 100*40000/40000 = 100
+            dispatch: 100
+
+    Without the SOCFULL guard:
+        i=0: pwr=100 → bumped to 300 → capped by min(pwr, setpoint=200, pwr_max=800)
+             = 200. Dispatch: 200; setpoint -= 200 → 0.
+        i=1: pwr=0 → bumped to 300 → cumulative cap drops it back to 0.
+             Dispatch: 0.
+    So the *first* device's dispatch shifts from 100 → 200 under the mutation.
+    """
+    d1 = _online_device(
+        "A",
+        home_output=100,
+        battery_input=200,
+        battery_output=0,
+        home_input=0,
+        electric_level=50,
+        state=DeviceState.ACTIVE,
+    )
+    d2 = _online_device(
+        "B",
+        home_output=100,
+        battery_input=200,
+        battery_output=0,
+        home_input=0,
+        electric_level=50,
+        state=DeviceState.ACTIVE,
+    )
+    fg = _attach_fusegroup([d1, d2])
+    mgr = build_test_manager([d1, d2], operation=ManagerMode.MATCHING, fusegroups=[fg])
+
+    await _drive(mgr, p1=0)
+
+    d1_calls = [c for c in d1.calls if c[0] == "power_discharge"]
+    d2_calls = [c for c in d2.calls if c[0] == "power_discharge"]
+    assert d1_calls and d2_calls
+    assert d1_calls[-1][1] == 100, (
+        f"first ACTIVE device should dispatch weighted-math pwr (100W); got {d1_calls}"
+    )
+    assert d2_calls[-1][1] == 100, (
+        f"second ACTIVE device should dispatch the remaining (100W); got {d2_calls}"
     )
 
 
